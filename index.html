@@ -274,6 +274,40 @@ main{padding:20px;padding-bottom:80px;max-width:900px;margin:0 auto}
 .cloud-status.syncing{color:var(--teal)}
 .cloud-status.error{color:var(--danger)}
 
+/* Procedures section */
+.proc-section{margin-bottom:14px}
+.proc-header{display:flex;align-items:baseline;justify-content:space-between;margin:18px 0 10px}
+.proc-title{font-family:'Fraunces',serif;font-size:17px;font-weight:500;color:var(--navy);letter-spacing:-0.3px}
+.proc-title small{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--gold);letter-spacing:1.2px;font-weight:400;margin-left:8px;text-transform:uppercase}
+.proc-list{background:white;border:1px solid var(--line);position:relative}
+.proc-list::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--teal)}
+.proc-row{display:flex;align-items:center;padding:8px 12px;border-top:1px solid var(--line);gap:10px}
+.proc-row:first-child{border-top:none}
+.proc-label{flex:1;font-size:13px;color:var(--ink);min-width:0}
+.proc-controls{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.proc-btn{width:34px;height:34px;border:1px solid var(--line);background:white;color:var(--navy);font-size:18px;font-weight:300;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;flex-shrink:0;font-family:'IBM Plex Sans',sans-serif;transition:all 0.15s}
+.proc-btn:active{transform:scale(0.92)}
+.proc-btn.plus{background:var(--navy);color:var(--cream);border-color:var(--navy)}
+.proc-btn.plus:hover{background:var(--navy-deep)}
+.proc-btn.minus:hover{background:var(--cream)}
+.proc-value{font-family:'Fraunces',serif;font-weight:600;font-size:20px;color:var(--navy);min-width:28px;text-align:center;line-height:1}
+.proc-total{background:var(--navy);color:var(--cream);padding:10px 14px;display:flex;justify-content:space-between;align-items:center;margin-top:10px;position:relative}
+.proc-total::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--teal)}
+.proc-total-label{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(247,243,236,0.85);font-weight:500}
+.proc-total-value{font-family:'Fraunces',serif;font-weight:600;font-size:22px;color:var(--cream);letter-spacing:-0.5px;line-height:1}
+
+/* Procedure chips on day records */
+.day-procs{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;padding-top:8px;border-top:1px solid var(--line)}
+.proc-chip{background:var(--cream);border:1px solid var(--line);padding:3px 8px;font-size:11px;color:var(--ink);display:inline-flex;gap:6px;align-items:baseline}
+.proc-chip strong{font-family:'Fraunces',serif;color:var(--teal);font-weight:600}
+
+/* Procedure stats grid */
+.proc-stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px}
+@media(min-width:600px){.proc-stats-grid{grid-template-columns:repeat(3,1fr)}}
+.proc-stat{background:white;border:1px solid var(--line);padding:10px 12px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.proc-stat-label{font-size:11px;color:var(--muted);letter-spacing:0.3px;flex:1;min-width:0}
+.proc-stat-value{font-family:'Fraunces',serif;font-weight:600;font-size:20px;color:var(--navy);line-height:1}
+
 @media(min-width:600px){
   main{padding:30px}
   .stat-grid{grid-template-columns:repeat(3,1fr)}
@@ -373,6 +407,17 @@ main{padding:20px;padding-bottom:80px;max-width:900px;margin:0 auto}
     </div>
   </div>
 
+  <div class="proc-section">
+    <div class="proc-header">
+      <div class="proc-title">Procedures <small>activity this clinic</small></div>
+    </div>
+    <div class="proc-list" id="procList"></div>
+    <div class="proc-total">
+      <div class="proc-total-label">Total Procedures Today</div>
+      <div class="proc-total-value" id="procTotalValue">0</div>
+    </div>
+  </div>
+
   <div class="notes-card">
     <textarea class="notes-input" id="notesInput" placeholder="Notes (optional) — e.g. complex CP case, no-show count, etc."></textarea>
   </div>
@@ -422,6 +467,11 @@ main{padding:20px;padding-bottom:80px;max-width:900px;margin:0 auto}
     <div class="chart-wrap"><canvas id="dailyChart"></canvas></div>
   </div>
 
+  <div class="proc-header" style="margin-top:24px">
+    <div class="proc-title">Procedures <small>monthly totals</small></div>
+  </div>
+  <div class="proc-stats-grid" id="procStatsGrid"></div>
+
   <div class="export-bar">
     <button class="btn" id="exportXlsxBtn">Export Excel</button>
     <button class="btn secondary" id="exportCsvBtn">Export CSV</button>
@@ -461,11 +511,47 @@ enableIndexedDbPersistence(db).catch(()=>{}); // offline cache; fails on multi-t
 const STORAGE_KEY = 'clinic_days_v2'; // legacy local cache, used only for one-time migration
 let days = [];
 let charts = {};
-let current = {insurance:0, cash:0, initial:0, followup:0, notes:''};
 let editingDate = null;
 let currentUid = null;
 
 const counters = ['insurance','cash','initial','followup'];
+const procedures = [
+  {key:'castApplication',     label:'Cast Application'},
+  {key:'castRemoval',         label:'Cast Removal'},
+  {key:'backSlabApplication', label:'Back Slab Application'},
+  {key:'backSlabRemoval',     label:'Back Slab Removal'},
+  {key:'kWireRemoval',        label:'K-Wire Removal'},
+  {key:'suturesRemoval',      label:'Sutures Removal'},
+  {key:'ponsetiCastUni',      label:'Ponseti Cast (Uni)'},
+  {key:'ponsetiCastBi',       label:'Ponseti Cast (Bilateral)'},
+  {key:'pavlikApplication',   label:'Pavlik Application'},
+  {key:'castTreatment',       label:'Cast Treatment'}
+];
+const procedureKeys = procedures.map(p => p.key);
+const procedureLabels = Object.fromEntries(procedures.map(p => [p.key, p.label]));
+
+function emptyCurrent(){
+  const c = {notes:''};
+  counters.forEach(k => c[k] = 0);
+  procedureKeys.forEach(k => c[k] = 0);
+  return c;
+}
+let current = emptyCurrent();
+
+// Build the procedure rows in the DOM (done before counter-btn listeners attach)
+const procListEl = document.getElementById('procList');
+procedures.forEach(p => {
+  const row = document.createElement('div');
+  row.className = 'proc-row';
+  row.innerHTML = `
+    <div class="proc-label">${p.label}</div>
+    <div class="proc-controls">
+      <button class="counter-btn proc-btn minus" data-action="dec" data-field="${p.key}">−</button>
+      <div class="proc-value" id="cnt-${p.key}">0</div>
+      <button class="counter-btn proc-btn plus" data-action="inc" data-field="${p.key}">+</button>
+    </div>`;
+  procListEl.appendChild(row);
+});
 
 const cloudStatusEl = () => document.getElementById('cloudStatus');
 function setCloud(state, text){
@@ -584,6 +670,12 @@ function updateDisplay(){
   counters.forEach(f => {
     document.getElementById('cnt-' + f).textContent = current[f];
   });
+  let procTotal = 0;
+  procedureKeys.forEach(f => {
+    document.getElementById('cnt-' + f).textContent = current[f];
+    procTotal += current[f];
+  });
+  document.getElementById('procTotalValue').textContent = procTotal;
   const payorTotal = current.insurance + current.cash;
   const visitTotal = current.initial + current.followup;
   const grandTotal = Math.max(payorTotal, visitTotal);
@@ -618,19 +710,16 @@ notesInput.addEventListener('input', () => {current.notes = notesInput.value});
 function loadDayForDate(dateStr){
   const existing = days.find(d => d.date === dateStr);
   if(existing){
-    current = {
-      insurance: existing.insurance || 0,
-      cash: existing.cash || 0,
-      initial: existing.initial || 0,
-      followup: existing.followup || 0,
-      notes: existing.notes || ''
-    };
+    current = emptyCurrent();
+    counters.forEach(k => current[k] = existing[k] || 0);
+    procedureKeys.forEach(k => current[k] = existing[k] || 0);
+    current.notes = existing.notes || '';
     editingDate = dateStr;
     entryTitle.textContent = 'Editing Day';
     notesInput.value = current.notes;
     showStatus('Loaded existing entry for this date. Save to update.', '');
   }else{
-    current = {insurance:0, cash:0, initial:0, followup:0, notes:''};
+    current = emptyCurrent();
     editingDate = null;
     entryTitle.textContent = dateStr === todayISO() ? "Today's Clinic" : 'New Clinic Day';
     notesInput.value = '';
@@ -657,13 +746,11 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
   }
   const dayDoc = {
     date,
-    insurance: current.insurance,
-    cash: current.cash,
-    initial: current.initial,
-    followup: current.followup,
     notes: current.notes || '',
     savedAt: new Date().toISOString()
   };
+  counters.forEach(k => dayDoc[k] = current[k]);
+  procedureKeys.forEach(k => dayDoc[k] = current[k]);
   try{
     await persistDay(dayDoc);
   }catch(e){
@@ -675,7 +762,7 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
   days.sort((a,b) => b.date.localeCompare(a.date));
   showStatus(editingDate ? '✓ Day updated.' : '✓ Day saved.', 'success');
   setTimeout(() => {
-    current = {insurance:0, cash:0, initial:0, followup:0, notes:''};
+    current = emptyCurrent();
     editingDate = null;
     notesInput.value = '';
     entryTitle.textContent = "Today's Clinic";
@@ -686,9 +773,10 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
 });
 
 document.getElementById('resetBtn').addEventListener('click', () => {
-  if(current.insurance + current.cash + current.initial + current.followup === 0 && !current.notes) return;
+  const hasData = counters.some(k => current[k] > 0) || procedureKeys.some(k => current[k] > 0) || current.notes;
+  if(!hasData) return;
   if(!confirm('Reset the counts on this screen?')) return;
-  current = {insurance:0, cash:0, initial:0, followup:0, notes:''};
+  current = emptyCurrent();
   notesInput.value = '';
   updateDisplay();
   hideStatus();
@@ -729,6 +817,11 @@ function renderRecords(){
         <div class="breakdown-pill"><div class="label">Initial</div><div class="val">${d.initial}</div></div>
         <div class="breakdown-pill"><div class="label">Follow-up</div><div class="val">${d.followup}</div></div>
       </div>
+      ${(() => {
+        const procs = procedures.filter(p => (d[p.key]||0) > 0);
+        if(!procs.length) return '';
+        return `<div class="day-procs">${procs.map(p => `<div class="proc-chip">${escapeHtml(p.label)}<strong>${d[p.key]}</strong></div>`).join('')}</div>`;
+      })()}
       ${d.notes ? `<div class="day-notes">${escapeHtml(d.notes)}</div>` : ''}
       <div class="day-actions">
         <button class="edit-btn" data-edit-date="${d.date}">Edit</button>
@@ -803,6 +896,23 @@ function renderStats(){
     <div class="stat-card"><div class="stat-label">Initial</div><div class="stat-value">${initial}</div><div class="stat-detail">${pct(initial)}% new</div></div>
     <div class="stat-card"><div class="stat-label">Follow-up</div><div class="stat-value">${followup}</div><div class="stat-detail">${pct(followup)}% return</div></div>
   `;
+
+  // Procedures stats
+  const procTotals = {};
+  procedureKeys.forEach(k => procTotals[k] = filtered.reduce((s,d) => s + (d[k]||0), 0));
+  const procGrand = Object.values(procTotals).reduce((s,n) => s+n, 0);
+  const procGrid = document.getElementById('procStatsGrid');
+  procGrid.innerHTML = `
+    <div class="proc-stat" style="grid-column:1/-1;background:var(--navy);color:var(--cream);border:none">
+      <div class="proc-stat-label" style="color:var(--gold-light);letter-spacing:1.5px;text-transform:uppercase;font-weight:500">Total Procedures</div>
+      <div class="proc-stat-value" style="color:var(--cream);font-size:26px">${procGrand}</div>
+    </div>
+    ${procedures.map(p => `
+      <div class="proc-stat">
+        <div class="proc-stat-label">${p.label}</div>
+        <div class="proc-stat-value">${procTotals[p.key]}</div>
+      </div>`).join('')}
+  `;
   drawCharts(filtered);
 }
 
@@ -865,29 +975,39 @@ document.getElementById('exportXlsxBtn').addEventListener('click', () => {
   const ym = statsMonth.value || defaultMonth();
   const filtered = days.filter(d => ymOf(d.date) === ym).sort((a,b) => a.date.localeCompare(b.date));
   if(filtered.length === 0){alert('No data to export.'); return}
-  const rows = filtered.map(d => ({
-    'Date': d.date,
-    'Day': new Date(d.date + 'T00:00').toLocaleDateString('en-GB', {weekday:'long'}),
-    'Insurance': d.insurance,
-    'Cash': d.cash,
-    'Initial': d.initial,
-    'Follow-up': d.followup,
-    'Total': Math.max((d.insurance||0)+(d.cash||0), (d.initial||0)+(d.followup||0)),
-    'Notes': d.notes || ''
-  }));
-  // Add a totals row
+  const rows = filtered.map(d => {
+    const row = {
+      'Date': d.date,
+      'Day': new Date(d.date + 'T00:00').toLocaleDateString('en-GB', {weekday:'long'}),
+      'Insurance': d.insurance||0,
+      'Cash': d.cash||0,
+      'Initial': d.initial||0,
+      'Follow-up': d.followup||0,
+      'Total': Math.max((d.insurance||0)+(d.cash||0), (d.initial||0)+(d.followup||0))
+    };
+    let procSum = 0;
+    procedures.forEach(p => { const v = d[p.key]||0; row[p.label] = v; procSum += v; });
+    row['Total Procedures'] = procSum;
+    row['Notes'] = d.notes || '';
+    return row;
+  });
   const totals = {
     'Date': 'MONTH TOTAL', 'Day': '',
     'Insurance': rows.reduce((s,r) => s+r.Insurance, 0),
     'Cash': rows.reduce((s,r) => s+r.Cash, 0),
     'Initial': rows.reduce((s,r) => s+r.Initial, 0),
     'Follow-up': rows.reduce((s,r) => s+r['Follow-up'], 0),
-    'Total': rows.reduce((s,r) => s+r.Total, 0),
-    'Notes': ''
+    'Total': rows.reduce((s,r) => s+r.Total, 0)
   };
+  procedures.forEach(p => { totals[p.label] = rows.reduce((s,r) => s+r[p.label], 0); });
+  totals['Total Procedures'] = rows.reduce((s,r) => s+r['Total Procedures'], 0);
+  totals['Notes'] = '';
   rows.push(totals);
   const ws = XLSX.utils.json_to_sheet(rows);
-  ws['!cols'] = [{wch:12},{wch:12},{wch:11},{wch:8},{wch:9},{wch:10},{wch:8},{wch:30}];
+  const cols = [{wch:12},{wch:12},{wch:11},{wch:8},{wch:9},{wch:10},{wch:8}];
+  procedures.forEach(() => cols.push({wch:16}));
+  cols.push({wch:14}, {wch:30});
+  ws['!cols'] = cols;
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, ym);
   XLSX.writeFile(wb, `Clinic_${ym}.xlsx`);
@@ -897,14 +1017,18 @@ document.getElementById('exportCsvBtn').addEventListener('click', () => {
   const ym = statsMonth.value || defaultMonth();
   const filtered = days.filter(d => ymOf(d.date) === ym).sort((a,b) => a.date.localeCompare(b.date));
   if(filtered.length === 0){alert('No data to export.'); return}
-  const header = ['Date','Day','Insurance','Cash','Initial','Follow-up','Total','Notes'];
+  const header = ['Date','Day','Insurance','Cash','Initial','Follow-up','Total',
+    ...procedures.map(p => p.label), 'Total Procedures', 'Notes'];
   const lines = [header.join(',')];
   filtered.forEach(d => {
     const total = Math.max((d.insurance||0)+(d.cash||0), (d.initial||0)+(d.followup||0));
+    const procVals = procedures.map(p => d[p.key]||0);
+    const procSum = procVals.reduce((s,n) => s+n, 0);
     const row = [
       d.date,
       new Date(d.date + 'T00:00').toLocaleDateString('en-GB', {weekday:'long'}),
-      d.insurance, d.cash, d.initial, d.followup, total,
+      d.insurance||0, d.cash||0, d.initial||0, d.followup||0, total,
+      ...procVals, procSum,
       d.notes || ''
     ].map(v => `"${String(v).replace(/"/g,'""')}"`);
     lines.push(row.join(','));
