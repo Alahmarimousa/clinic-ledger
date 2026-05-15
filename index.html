@@ -762,13 +762,8 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
   days.sort((a,b) => b.date.localeCompare(a.date));
   showStatus(editingDate ? '✓ Day updated.' : '✓ Day saved.', 'success');
   setTimeout(() => {
-    current = emptyCurrent();
-    editingDate = null;
-    notesInput.value = '';
-    entryTitle.textContent = "Today's Clinic";
     entryDate.value = todayISO();
-    updateDisplay();
-    hideStatus();
+    loadDayForDate(todayISO());
   }, 1500);
 });
 
