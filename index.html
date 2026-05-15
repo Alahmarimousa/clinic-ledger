@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Clinic Ledger · Al Habib Al Takhassusi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+:root{
+  --navy:#0a2540; --navy-deep:#06182e;
+  --teal:#0f7d8a; --teal-light:#3aa5b1;
+  --gold:#c9a55a; --gold-light:#e4c989;
+  --cream:#f7f3ec; --paper:#fbf8f2;
+  --ink:#1a2332; --muted:#6b7280;
+  --line:#e5dccb; --danger:#a4341d;
+  --success:#2f6b3a;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{overflow-x:hidden}
+body{
+  font-family:'IBM Plex Sans',sans-serif;
+  background:var(--paper); color:var(--ink);
+  min-height:100vh; font-size:15px; line-height:1.5;
+  background-image:
+    radial-gradient(circle at 10% 0%, rgba(15,125,138,0.04) 0%, transparent 40%),
+    radial-gradient(circle at 90% 100%, rgba(201,165,90,0.05) 0%, transparent 40%);
+}
+header{
+  background:var(--navy); color:var(--cream);
+  padding:18px 20px 16px; border-bottom:3px solid var(--gold);
+  position:sticky; top:0; z-index:50;
+  box-shadow:0 4px 20px rgba(10,37,64,0.15);
+}
+.brand{display:flex;align-items:center;gap:12px;margin-bottom:4px}
+.brand-mark{
+  width:34px;height:34px; border:1.5px solid var(--gold);
+  display:flex;align-items:center;justify-content:center;
+  font-family:'Fraunces',serif;font-weight:700;font-size:17px;
+  color:var(--gold);
+}
+.brand h1{font-family:'Fraunces',serif;font-weight:500;font-size:20px;letter-spacing:-0.3px;line-height:1.1}
+.brand .sub{font-size:11px;color:var(--gold-light);letter-spacing:1.5px;text-transform:uppercase;margin-top:2px}
+.tabs{
+  display:flex;margin-top:14px;border-bottom:1px solid rgba(228,201,137,0.2);
+  margin-left:-20px;margin-right:-20px;padding:0 20px;overflow-x:auto;scrollbar-width:none;
+}
+.tabs::-webkit-scrollbar{display:none}
+.tab{
+  background:none;border:none;color:rgba(247,243,236,0.55);
+  padding:10px 14px 10px 0;margin-right:18px;
+  font-size:12px;letter-spacing:1.2px;text-transform:uppercase;
+  font-weight:500;cursor:pointer;position:relative;white-space:nowrap;
+}
+.tab.active{color:var(--gold-light)}
+.tab.active::after{content:'';position:absolute;bottom:-1px;left:0;right:18px;height:2px;background:var(--gold)}
+main{padding:20px;padding-bottom:80px;max-width:900px;margin:0 auto}
+.section{display:none}
+.section.active{display:block;animation:fadeIn 0.3s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.section-title{font-family:'Fraunces',serif;font-size:24px;font-weight:500;color:var(--navy);margin-bottom:4px;letter-spacing:-0.4px}
+.section-sub{font-size:13px;color:var(--muted);margin-bottom:20px;font-style:italic}
+
+/* Date card */
+.date-card{
+  background:white;border:1px solid var(--line);
+  padding:16px;margin-bottom:14px;position:relative;
+}
+.date-card::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--gold);
+}
+.date-label{
+  font-size:10px;letter-spacing:1.5px;text-transform:uppercase;
+  color:var(--muted);margin-bottom:6px;font-weight:500;
+}
+.date-input{
+  width:100%;border:none;font-family:'Fraunces',serif;
+  font-size:20px;font-weight:500;color:var(--navy);
+  background:transparent;outline:none;padding:4px 0;
+}
+
+/* Counter cards */
+.counters{
+  display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;
+}
+.counter-card{
+  background:white;border:1px solid var(--line);padding:14px 12px;
+  position:relative;
+}
+.counter-card.full{grid-column:1 / -1}
+.counter-card.accent-teal{border-top:3px solid var(--teal)}
+.counter-card.accent-gold{border-top:3px solid var(--gold)}
+.counter-card.accent-navy{border-top:3px solid var(--navy)}
+.counter-card.accent-tealLight{border-top:3px solid var(--teal-light)}
+
+.counter-label{
+  font-size:10px;letter-spacing:1.2px;text-transform:uppercase;
+  color:var(--muted);font-weight:500;margin-bottom:10px;
+  text-align:center;
+}
+.counter-controls{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+}
+.counter-btn{
+  width:42px;height:42px;border:1.5px solid var(--line);
+  background:white;color:var(--navy);font-size:22px;font-weight:300;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  line-height:1;flex-shrink:0;transition:all 0.15s;
+  font-family:'IBM Plex Sans',sans-serif;
+}
+.counter-btn:active{transform:scale(0.92)}
+.counter-btn.plus{background:var(--navy);color:var(--cream);border-color:var(--navy)}
+.counter-btn.plus:hover{background:var(--navy-deep)}
+.counter-btn.minus:hover{background:var(--cream)}
+.counter-value{
+  font-family:'Fraunces',serif;font-weight:600;font-size:36px;
+  color:var(--navy);letter-spacing:-1px;flex:1;text-align:center;
+  line-height:1;min-width:0;
+}
+
+/* Total summary */
+.total-bar{
+  background:var(--navy);color:var(--cream);
+  padding:14px 16px;margin-bottom:14px;
+  display:flex;justify-content:space-between;align-items:center;
+  position:relative;
+}
+.total-bar::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--gold);
+}
+.total-label{
+  font-size:11px;letter-spacing:1.5px;text-transform:uppercase;
+  color:var(--gold-light);font-weight:500;
+}
+.total-value{
+  font-family:'Fraunces',serif;font-weight:600;font-size:28px;color:var(--cream);
+  letter-spacing:-0.5px;line-height:1;
+}
+.total-check{
+  font-size:10px;letter-spacing:0.5px;
+  color:rgba(247,243,236,0.6);margin-top:4px;
+}
+.total-check.warn{color:#f4b942}
+.total-check.ok{color:#9bd4a3}
+
+/* Notes */
+.notes-card{
+  background:white;border:1px solid var(--line);padding:12px;margin-bottom:14px;
+}
+.notes-input{
+  width:100%;border:none;font-family:'IBM Plex Sans',sans-serif;
+  font-size:14px;color:var(--ink);outline:none;resize:none;
+  min-height:36px;background:transparent;
+}
+.notes-input::placeholder{color:var(--muted);font-style:italic}
+
+/* Save bar */
+.btn{
+  display:inline-block;background:var(--navy);color:var(--cream);
+  padding:12px 18px;border:none;cursor:pointer;
+  font-family:'IBM Plex Sans',sans-serif;font-size:12px;
+  letter-spacing:1.5px;text-transform:uppercase;font-weight:500;
+  transition:background 0.2s;
+}
+.btn:hover{background:var(--navy-deep)}
+.btn:disabled{opacity:0.5;cursor:not-allowed}
+.btn.secondary{background:transparent;color:var(--navy);border:1px solid var(--navy)}
+.btn.gold{background:var(--gold);color:var(--navy)}
+.btn.gold:hover{background:var(--gold-light)}
+
+.action-row{display:flex;gap:8px;margin-top:16px}
+.action-row .btn{flex:1;padding:14px 10px}
+
+.status{
+  margin:0 0 16px;padding:10px 12px;font-size:13px;
+  background:var(--cream);border-left:3px solid var(--teal);display:none;
+}
+.status.show{display:block}
+.status.error{border-color:var(--danger);color:var(--danger)}
+.status.success{border-color:var(--success);color:var(--success)}
+
+/* Records */
+.records-header{
+  display:flex;justify-content:space-between;align-items:flex-end;
+  margin-bottom:14px;flex-wrap:wrap;gap:10px;
+}
+.month-selector{
+  border:1px solid var(--line);background:white;padding:8px 10px;
+  font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--navy);
+}
+.day-item{
+  background:white;border:1px solid var(--line);
+  padding:14px;margin-bottom:8px;
+}
+.day-header{
+  display:flex;justify-content:space-between;align-items:center;
+  margin-bottom:10px;
+}
+.day-date{
+  font-family:'Fraunces',serif;font-weight:500;font-size:16px;
+  color:var(--navy);
+}
+.day-total{
+  font-family:'IBM Plex Mono',monospace;font-size:13px;
+  color:var(--gold);background:var(--navy);padding:3px 9px;
+  letter-spacing:1px;font-weight:500;
+}
+.day-breakdown{
+  display:grid;grid-template-columns:repeat(4,1fr);gap:6px;
+  margin-bottom:8px;
+}
+.breakdown-pill{
+  text-align:center;padding:6px 4px;background:var(--cream);
+  font-size:11px;
+}
+.breakdown-pill .label{
+  font-size:9px;letter-spacing:0.8px;text-transform:uppercase;
+  color:var(--muted);margin-bottom:2px;font-weight:500;
+}
+.breakdown-pill .val{
+  font-family:'Fraunces',serif;font-weight:600;font-size:16px;color:var(--navy);
+}
+.day-notes{
+  font-size:12px;color:var(--muted);font-style:italic;
+  padding-top:8px;border-top:1px solid var(--line);
+}
+.day-actions{
+  display:flex;justify-content:flex-end;gap:8px;margin-top:8px;
+}
+.day-actions button{
+  background:none;border:none;font-size:11px;letter-spacing:0.5px;
+  text-transform:uppercase;cursor:pointer;padding:4px 8px;
+  font-weight:500;font-family:'IBM Plex Sans',sans-serif;
+}
+.day-actions .edit-btn{color:var(--teal)}
+.day-actions .del-btn{color:var(--danger)}
+
+.empty-state{text-align:center;padding:40px 20px;color:var(--muted)}
+.empty-state .big{font-family:'Fraunces',serif;font-size:48px;color:var(--line);margin-bottom:8px}
+
+/* Stats */
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
+.stat-card{background:white;border:1px solid var(--line);padding:14px;position:relative}
+.stat-card.featured{grid-column:1 / -1;background:var(--navy);color:var(--cream);border:none}
+.stat-card.featured::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--gold)}
+.stat-label{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;font-weight:500}
+.stat-card.featured .stat-label{color:var(--gold-light)}
+.stat-value{font-family:'Fraunces',serif;font-size:32px;font-weight:600;color:var(--navy);letter-spacing:-0.5px;line-height:1}
+.stat-card.featured .stat-value{color:var(--cream);font-size:42px}
+.stat-detail{font-size:11px;color:var(--muted);margin-top:4px}
+.stat-card.featured .stat-detail{color:rgba(247,243,236,0.7)}
+.chart-card{background:white;border:1px solid var(--line);padding:16px;margin-bottom:12px}
+.chart-title{font-family:'Fraunces',serif;font-size:15px;font-weight:500;color:var(--navy);margin-bottom:12px;display:flex;justify-content:space-between;align-items:baseline}
+.chart-title small{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--gold);letter-spacing:1px;font-weight:400;font-style:normal}
+.chart-wrap{position:relative;height:240px}
+.export-bar{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}
+.export-bar .btn{flex:1;min-width:120px;padding:14px 10px;font-size:11px}
+.ornament{text-align:center;margin:30px 0 10px;color:var(--gold);font-family:'Fraunces',serif;letter-spacing:8px;font-size:14px}
+
+@media(min-width:600px){
+  main{padding:30px}
+  .stat-grid{grid-template-columns:repeat(3,1fr)}
+  .stat-card.featured{grid-column:1 / -1}
+  .counters{grid-template-columns:repeat(4,1fr)}
+  .counter-card.full{grid-column:1 / -1}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="brand-mark">M</div>
+    <div>
+      <h1>Clinic Ledger</h1>
+      <div class="sub">Al Habib · Pediatric Orthopedic</div>
+    </div>
+  </div>
+  <div class="tabs">
+    <button class="tab active" data-tab="entry">Today</button>
+    <button class="tab" data-tab="records">Records</button>
+    <button class="tab" data-tab="stats">Statistics</button>
+  </div>
+</header>
+
+<main>
+
+<!-- ENTRY -->
+<section class="section active" id="entry">
+  <div class="section-title" id="entryTitle">Today's Clinic</div>
+  <div class="section-sub">Tap + to count, − to undo.</div>
+
+  <div class="status" id="status"></div>
+
+  <div class="date-card">
+    <div class="date-label">Clinic Date</div>
+    <input type="date" class="date-input" id="entryDate">
+  </div>
+
+  <div class="total-bar">
+    <div>
+      <div class="total-label">Total Patients</div>
+      <div class="total-check" id="totalCheck"></div>
+    </div>
+    <div class="total-value" id="totalValue">0</div>
+  </div>
+
+  <div class="counters">
+    <div class="counter-card accent-teal">
+      <div class="counter-label">Insurance</div>
+      <div class="counter-controls">
+        <button class="counter-btn minus" data-action="dec" data-field="insurance">−</button>
+        <div class="counter-value" id="cnt-insurance">0</div>
+        <button class="counter-btn plus" data-action="inc" data-field="insurance">+</button>
+      </div>
+    </div>
+    <div class="counter-card accent-gold">
+      <div class="counter-label">Cash</div>
+      <div class="counter-controls">
+        <button class="counter-btn minus" data-action="dec" data-field="cash">−</button>
+        <div class="counter-value" id="cnt-cash">0</div>
+        <button class="counter-btn plus" data-action="inc" data-field="cash">+</button>
+      </div>
+    </div>
+    <div class="counter-card accent-navy">
+      <div class="counter-label">Initial Consult</div>
+      <div class="counter-controls">
+        <button class="counter-btn minus" data-action="dec" data-field="initial">−</button>
+        <div class="counter-value" id="cnt-initial">0</div>
+        <button class="counter-btn plus" data-action="inc" data-field="initial">+</button>
+      </div>
+    </div>
+    <div class="counter-card accent-tealLight">
+      <div class="counter-label">Follow-up</div>
+      <div class="counter-controls">
+        <button class="counter-btn minus" data-action="dec" data-field="followup">−</button>
+        <div class="counter-value" id="cnt-followup">0</div>
+        <button class="counter-btn plus" data-action="inc" data-field="followup">+</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes-card">
+    <textarea class="notes-input" id="notesInput" placeholder="Notes (optional) — e.g. complex CP case, no-show count, etc."></textarea>
+  </div>
+
+  <div class="action-row">
+    <button class="btn secondary" id="resetBtn">Reset</button>
+    <button class="btn gold" id="saveBtn">Save Day</button>
+  </div>
+</section>
+
+<!-- RECORDS -->
+<section class="section" id="records">
+  <div class="records-header">
+    <div>
+      <div class="section-title">Clinic Days</div>
+      <div class="section-sub">All saved entries</div>
+    </div>
+    <input type="month" class="month-selector" id="recordsMonth">
+  </div>
+  <div id="recordsList"></div>
+</section>
+
+<!-- STATS -->
+<section class="section" id="stats">
+  <div class="records-header">
+    <div>
+      <div class="section-title">Monthly Statistics</div>
+      <div class="section-sub">Performance overview</div>
+    </div>
+    <input type="month" class="month-selector" id="statsMonth">
+  </div>
+
+  <div class="stat-grid" id="statGrid"></div>
+
+  <div class="chart-card">
+    <div class="chart-title">Payor Mix <small>insurance vs cash</small></div>
+    <div class="chart-wrap"><canvas id="payorChart"></canvas></div>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-title">Visit Type <small>new vs follow-up</small></div>
+    <div class="chart-wrap"><canvas id="visitChart"></canvas></div>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-title">Daily Volume <small>patients per clinic day</small></div>
+    <div class="chart-wrap"><canvas id="dailyChart"></canvas></div>
+  </div>
+
+  <div class="export-bar">
+    <button class="btn" id="exportXlsxBtn">Export Excel</button>
+    <button class="btn secondary" id="exportCsvBtn">Export CSV</button>
+    <button class="btn secondary" id="backupBtn">Backup All</button>
+  </div>
+
+  <div class="ornament">✦ ✦ ✦</div>
+</section>
+
+</main>
+
+<script>
+const STORAGE_KEY = 'clinic_days_v2';
+let days = [];
+let charts = {};
+let current = {insurance:0, cash:0, initial:0, followup:0, notes:''};
+let editingDate = null; // ISO date string if editing existing day
+
+const counters = ['insurance','cash','initial','followup'];
+
+function load(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr : [];
+  }catch(e){return []}
+}
+function persist(){localStorage.setItem(STORAGE_KEY, JSON.stringify(days))}
+
+function todayISO(){
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function defaultMonth(){
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+}
+
+// ====== TABS ======
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.section').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    document.getElementById(t.dataset.tab).classList.add('active');
+    if(t.dataset.tab === 'records') renderRecords();
+    if(t.dataset.tab === 'stats') renderStats();
+  });
+});
+
+// ====== ELEMENTS ======
+const entryDate = document.getElementById('entryDate');
+const entryTitle = document.getElementById('entryTitle');
+const totalValue = document.getElementById('totalValue');
+const totalCheck = document.getElementById('totalCheck');
+const notesInput = document.getElementById('notesInput');
+const statusEl = document.getElementById('status');
+
+entryDate.value = todayISO();
+
+function showStatus(msg, kind){
+  statusEl.classList.add('show');
+  statusEl.classList.remove('error','success');
+  if(kind) statusEl.classList.add(kind);
+  statusEl.textContent = msg;
+}
+function hideStatus(){statusEl.classList.remove('show')}
+
+// ====== COUNTER LOGIC ======
+function updateDisplay(){
+  counters.forEach(f => {
+    document.getElementById('cnt-' + f).textContent = current[f];
+  });
+  const payorTotal = current.insurance + current.cash;
+  const visitTotal = current.initial + current.followup;
+  const grandTotal = Math.max(payorTotal, visitTotal);
+  totalValue.textContent = grandTotal;
+
+  // Sanity check: payor total should equal visit total
+  if(payorTotal === 0 && visitTotal === 0){
+    totalCheck.textContent = '';
+    totalCheck.className = 'total-check';
+  }else if(payorTotal === visitTotal){
+    totalCheck.textContent = '✓ Payor & visit counts match';
+    totalCheck.className = 'total-check ok';
+  }else{
+    totalCheck.textContent = `Payor: ${payorTotal} · Visit: ${visitTotal}`;
+    totalCheck.className = 'total-check warn';
+  }
+}
+
+document.querySelectorAll('.counter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const f = btn.dataset.field;
+    const a = btn.dataset.action;
+    if(a === 'inc') current[f]++;
+    else if(a === 'dec' && current[f] > 0) current[f]--;
+    updateDisplay();
+  });
+});
+
+notesInput.addEventListener('input', () => {current.notes = notesInput.value});
+
+// ====== LOAD EXISTING DAY WHEN DATE CHANGES ======
+function loadDayForDate(dateStr){
+  const existing = days.find(d => d.date === dateStr);
+  if(existing){
+    current = {
+      insurance: existing.insurance || 0,
+      cash: existing.cash || 0,
+      initial: existing.initial || 0,
+      followup: existing.followup || 0,
+      notes: existing.notes || ''
+    };
+    editingDate = dateStr;
+    entryTitle.textContent = 'Editing Day';
+    notesInput.value = current.notes;
+    showStatus('Loaded existing entry for this date. Save to update.', '');
+  }else{
+    current = {insurance:0, cash:0, initial:0, followup:0, notes:''};
+    editingDate = null;
+    entryTitle.textContent = dateStr === todayISO() ? "Today's Clinic" : 'New Clinic Day';
+    notesInput.value = '';
+    hideStatus();
+  }
+  updateDisplay();
+}
+
+entryDate.addEventListener('change', () => loadDayForDate(entryDate.value));
+
+// ====== SAVE ======
+document.getElementById('saveBtn').addEventListener('click', () => {
+  const date = entryDate.value;
+  if(!date){alert('Please pick a date.'); return}
+  const payorTotal = current.insurance + current.cash;
+  const visitTotal = current.initial + current.followup;
+  if(payorTotal === 0 && visitTotal === 0){
+    alert('Add at least one patient before saving.');
+    return;
+  }
+  if(payorTotal !== visitTotal){
+    const ok = confirm(`Payor count (${payorTotal}) doesn't match visit count (${visitTotal}). Save anyway?`);
+    if(!ok) return;
+  }
+  // Remove existing for same date if any
+  days = days.filter(d => d.date !== date);
+  days.push({
+    date: date,
+    insurance: current.insurance,
+    cash: current.cash,
+    initial: current.initial,
+    followup: current.followup,
+    notes: current.notes || '',
+    savedAt: new Date().toISOString()
+  });
+  days.sort((a,b) => b.date.localeCompare(a.date));
+  persist();
+  showStatus(editingDate ? '✓ Day updated.' : '✓ Day saved.', 'success');
+  // Reset for next entry
+  setTimeout(() => {
+    current = {insurance:0, cash:0, initial:0, followup:0, notes:''};
+    editingDate = null;
+    notesInput.value = '';
+    entryTitle.textContent = "Today's Clinic";
+    entryDate.value = todayISO();
+    updateDisplay();
+    hideStatus();
+  }, 1500);
+});
+
+document.getElementById('resetBtn').addEventListener('click', () => {
+  if(current.insurance + current.cash + current.initial + current.followup === 0 && !current.notes) return;
+  if(!confirm('Reset the counts on this screen?')) return;
+  current = {insurance:0, cash:0, initial:0, followup:0, notes:''};
+  notesInput.value = '';
+  updateDisplay();
+  hideStatus();
+});
+
+// ====== RECORDS ======
+const recordsMonth = document.getElementById('recordsMonth');
+const recordsList = document.getElementById('recordsList');
+recordsMonth.value = defaultMonth();
+recordsMonth.addEventListener('change', renderRecords);
+
+function ymOf(dateStr){return dateStr.slice(0,7)}
+
+function renderRecords(){
+  const ym = recordsMonth.value || defaultMonth();
+  const filtered = days.filter(d => ymOf(d.date) === ym);
+  if(filtered.length === 0){
+    recordsList.innerHTML = `<div class="empty-state">
+      <div class="big">∅</div>
+      <div>No clinic days this month</div>
+      <div style="font-size:11px;margin-top:8px;letter-spacing:1px;text-transform:uppercase">Add some days first</div>
+    </div>`;
+    return;
+  }
+  let html = `<div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--gold);letter-spacing:1.5px;margin-bottom:10px">${filtered.length} CLINIC DAY${filtered.length>1?'S':''}</div>`;
+  filtered.forEach(d => {
+    const total = Math.max(d.insurance + d.cash, d.initial + d.followup);
+    const dateObj = new Date(d.date + 'T00:00');
+    const dateStr = dateObj.toLocaleDateString('en-GB', {weekday:'short', day:'2-digit', month:'short'});
+    html += `<div class="day-item">
+      <div class="day-header">
+        <div class="day-date">${dateStr}</div>
+        <div class="day-total">${total} pts</div>
+      </div>
+      <div class="day-breakdown">
+        <div class="breakdown-pill"><div class="label">Insurance</div><div class="val">${d.insurance}</div></div>
+        <div class="breakdown-pill"><div class="label">Cash</div><div class="val">${d.cash}</div></div>
+        <div class="breakdown-pill"><div class="label">Initial</div><div class="val">${d.initial}</div></div>
+        <div class="breakdown-pill"><div class="label">Follow-up</div><div class="val">${d.followup}</div></div>
+      </div>
+      ${d.notes ? `<div class="day-notes">${escapeHtml(d.notes)}</div>` : ''}
+      <div class="day-actions">
+        <button class="edit-btn" data-edit-date="${d.date}">Edit</button>
+        <button class="del-btn" data-del-date="${d.date}">Delete</button>
+      </div>
+    </div>`;
+  });
+  recordsList.innerHTML = html;
+
+  recordsList.querySelectorAll('[data-edit-date]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const date = btn.dataset.editDate;
+      entryDate.value = date;
+      loadDayForDate(date);
+      document.querySelector('.tab[data-tab="entry"]').click();
+      window.scrollTo({top: 0, behavior:'smooth'});
+    });
+  });
+  recordsList.querySelectorAll('[data-del-date]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if(!confirm('Delete this clinic day?')) return;
+      days = days.filter(d => d.date !== btn.dataset.delDate);
+      persist();
+      renderRecords();
+    });
+  });
+}
+
+function escapeHtml(s){
+  return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// ====== STATS ======
+const statsMonth = document.getElementById('statsMonth');
+const statGrid = document.getElementById('statGrid');
+statsMonth.value = defaultMonth();
+statsMonth.addEventListener('change', renderStats);
+
+function ymLabel(ym){
+  const [y,m] = ym.split('-');
+  const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  return `${months[parseInt(m)-1]} ${y}`;
+}
+
+function renderStats(){
+  const ym = statsMonth.value || defaultMonth();
+  const filtered = days.filter(d => ymOf(d.date) === ym);
+  const clinicDays = filtered.length;
+  const insurance = filtered.reduce((s,d) => s + (d.insurance||0), 0);
+  const cash = filtered.reduce((s,d) => s + (d.cash||0), 0);
+  const initial = filtered.reduce((s,d) => s + (d.initial||0), 0);
+  const followup = filtered.reduce((s,d) => s + (d.followup||0), 0);
+  const payorTotal = insurance + cash;
+  const visitTotal = initial + followup;
+  const total = Math.max(payorTotal, visitTotal);
+  const avgPerDay = clinicDays ? (total/clinicDays).toFixed(1) : '0';
+  const pct = (n) => total ? Math.round(n/total*100) : 0;
+
+  statGrid.innerHTML = `
+    <div class="stat-card featured">
+      <div class="stat-label">Total Patients · ${clinicDays} day${clinicDays!==1?'s':''}</div>
+      <div class="stat-value">${total}</div>
+      <div class="stat-detail">${ymLabel(ym)} · avg ${avgPerDay}/day</div>
+    </div>
+    <div class="stat-card"><div class="stat-label">Insurance</div><div class="stat-value">${insurance}</div><div class="stat-detail">${pct(insurance)}% of payor mix</div></div>
+    <div class="stat-card"><div class="stat-label">Cash</div><div class="stat-value">${cash}</div><div class="stat-detail">${pct(cash)}% of payor mix</div></div>
+    <div class="stat-card"><div class="stat-label">Initial</div><div class="stat-value">${initial}</div><div class="stat-detail">${pct(initial)}% new</div></div>
+    <div class="stat-card"><div class="stat-label">Follow-up</div><div class="stat-value">${followup}</div><div class="stat-detail">${pct(followup)}% return</div></div>
+  `;
+  drawCharts(filtered);
+}
+
+function destroyChart(id){if(charts[id]){charts[id].destroy(); delete charts[id]}}
+
+const PALETTE = {navy:'#0a2540',teal:'#0f7d8a',tealLight:'#3aa5b1',gold:'#c9a55a',goldLight:'#e4c989',muted:'#9ca3af'};
+const CF = {family:"'IBM Plex Sans', sans-serif",size:11};
+
+function drawCharts(data){
+  ['payorChart','visitChart','dailyChart'].forEach(destroyChart);
+  if(data.length === 0){
+    ['payorChart','visitChart','dailyChart'].forEach(id => {
+      const c = document.getElementById(id);
+      const ctx = c.getContext('2d');
+      ctx.clearRect(0,0,c.width,c.height);
+      ctx.font = "13px 'Fraunces', serif";
+      ctx.fillStyle = '#9ca3af';
+      ctx.textAlign = 'center';
+      ctx.fillText('No data for this month', c.width/2, c.height/2);
+    });
+    return;
+  }
+  const insurance = data.reduce((s,d) => s + (d.insurance||0), 0);
+  const cash = data.reduce((s,d) => s + (d.cash||0), 0);
+  const initial = data.reduce((s,d) => s + (d.initial||0), 0);
+  const followup = data.reduce((s,d) => s + (d.followup||0), 0);
+
+  charts.payorChart = new Chart(document.getElementById('payorChart'), {
+    type:'doughnut',
+    data:{labels:['Insurance','Cash'],datasets:[{data:[insurance,cash],backgroundColor:[PALETTE.teal,PALETTE.gold],borderWidth:0}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'60%',plugins:{legend:{position:'bottom',labels:{font:CF,color:PALETTE.navy,padding:12}}}}
+  });
+  charts.visitChart = new Chart(document.getElementById('visitChart'), {
+    type:'doughnut',
+    data:{labels:['Initial Consult','Follow-up'],datasets:[{data:[initial,followup],backgroundColor:[PALETTE.navy,PALETTE.tealLight],borderWidth:0}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'60%',plugins:{legend:{position:'bottom',labels:{font:CF,color:PALETTE.navy,padding:12}}}}
+  });
+
+  // Daily volume across full month
+  const ym = statsMonth.value || defaultMonth();
+  const [y,m] = ym.split('-').map(Number);
+  const dim = new Date(y,m,0).getDate();
+  const labels = [], values = [];
+  const dayMap = {};
+  data.forEach(d => {
+    const dayNum = parseInt(d.date.slice(8,10));
+    dayMap[dayNum] = Math.max((d.insurance||0)+(d.cash||0), (d.initial||0)+(d.followup||0));
+  });
+  for(let i=1;i<=dim;i++){labels.push(i);values.push(dayMap[i]||0)}
+  charts.dailyChart = new Chart(document.getElementById('dailyChart'), {
+    type:'bar',
+    data:{labels,datasets:[{data:values,backgroundColor:PALETTE.gold,borderRadius:0}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+      scales:{x:{ticks:{font:{family:"'IBM Plex Mono', monospace",size:9},color:PALETTE.muted},grid:{display:false}},y:{ticks:{font:CF,color:PALETTE.navy,precision:0},grid:{color:'#e5dccb'}}}}
+  });
+}
+
+// ====== EXPORT ======
+document.getElementById('exportXlsxBtn').addEventListener('click', () => {
+  const ym = statsMonth.value || defaultMonth();
+  const filtered = days.filter(d => ymOf(d.date) === ym).sort((a,b) => a.date.localeCompare(b.date));
+  if(filtered.length === 0){alert('No data to export.'); return}
+  const rows = filtered.map(d => ({
+    'Date': d.date,
+    'Day': new Date(d.date + 'T00:00').toLocaleDateString('en-GB', {weekday:'long'}),
+    'Insurance': d.insurance,
+    'Cash': d.cash,
+    'Initial': d.initial,
+    'Follow-up': d.followup,
+    'Total': Math.max((d.insurance||0)+(d.cash||0), (d.initial||0)+(d.followup||0)),
+    'Notes': d.notes || ''
+  }));
+  // Add a totals row
+  const totals = {
+    'Date': 'MONTH TOTAL', 'Day': '',
+    'Insurance': rows.reduce((s,r) => s+r.Insurance, 0),
+    'Cash': rows.reduce((s,r) => s+r.Cash, 0),
+    'Initial': rows.reduce((s,r) => s+r.Initial, 0),
+    'Follow-up': rows.reduce((s,r) => s+r['Follow-up'], 0),
+    'Total': rows.reduce((s,r) => s+r.Total, 0),
+    'Notes': ''
+  };
+  rows.push(totals);
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [{wch:12},{wch:12},{wch:11},{wch:8},{wch:9},{wch:10},{wch:8},{wch:30}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, ym);
+  XLSX.writeFile(wb, `Clinic_${ym}.xlsx`);
+});
+
+document.getElementById('exportCsvBtn').addEventListener('click', () => {
+  const ym = statsMonth.value || defaultMonth();
+  const filtered = days.filter(d => ymOf(d.date) === ym).sort((a,b) => a.date.localeCompare(b.date));
+  if(filtered.length === 0){alert('No data to export.'); return}
+  const header = ['Date','Day','Insurance','Cash','Initial','Follow-up','Total','Notes'];
+  const lines = [header.join(',')];
+  filtered.forEach(d => {
+    const total = Math.max((d.insurance||0)+(d.cash||0), (d.initial||0)+(d.followup||0));
+    const row = [
+      d.date,
+      new Date(d.date + 'T00:00').toLocaleDateString('en-GB', {weekday:'long'}),
+      d.insurance, d.cash, d.initial, d.followup, total,
+      d.notes || ''
+    ].map(v => `"${String(v).replace(/"/g,'""')}"`);
+    lines.push(row.join(','));
+  });
+  const blob = new Blob([lines.join('\n')], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `Clinic_${ym}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+document.getElementById('backupBtn').addEventListener('click', () => {
+  if(days.length === 0){alert('No data to backup.'); return}
+  const blob = new Blob([JSON.stringify(days,null,2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `Clinic_backup_${todayISO()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+// ====== INIT ======
+days = load();
+loadDayForDate(entryDate.value);
+</script>
+</body>
+</html>
