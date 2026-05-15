@@ -260,6 +260,20 @@ main{padding:20px;padding-bottom:80px;max-width:900px;margin:0 auto}
 .export-bar .btn{flex:1;min-width:120px;padding:14px 10px;font-size:11px}
 .ornament{text-align:center;margin:30px 0 10px;color:var(--gold);font-family:'Fraunces',serif;letter-spacing:8px;font-size:14px}
 
+/* Sign-in gate */
+.gate{position:fixed;inset:0;background:var(--paper);z-index:200;display:flex;align-items:center;justify-content:center;padding:24px}
+.gate-inner{max-width:340px;width:100%;text-align:center}
+.gate-mark{width:60px;height:60px;border:2px solid var(--gold);display:flex;align-items:center;justify-content:center;font-family:'Fraunces',serif;font-weight:700;font-size:32px;color:var(--gold);margin:0 auto 18px}
+.gate h2{font-family:'Fraunces',serif;font-weight:500;font-size:24px;color:var(--navy);letter-spacing:-0.4px;margin-bottom:8px}
+.gate p{font-size:13px;color:var(--muted);margin-bottom:20px;line-height:1.55}
+.gate-msg{font-size:12px;color:var(--danger);margin-top:14px;min-height:18px}
+.user-chip{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--gold-light);margin-top:8px;letter-spacing:0.5px}
+.user-chip button{background:none;border:1px solid rgba(228,201,137,0.4);color:var(--gold-light);font-size:10px;padding:3px 8px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;font-family:inherit}
+.user-chip button:hover{background:rgba(228,201,137,0.1)}
+.cloud-status{font-size:10px;color:var(--muted);letter-spacing:0.5px;margin-left:auto}
+.cloud-status.syncing{color:var(--teal)}
+.cloud-status.error{color:var(--danger)}
+
 @media(min-width:600px){
   main{padding:30px}
   .stat-grid{grid-template-columns:repeat(3,1fr)}
@@ -271,12 +285,28 @@ main{padding:20px;padding-bottom:80px;max-width:900px;margin:0 auto}
 </head>
 <body>
 
+<!-- Sign-in gate (shown until user is authenticated) -->
+<div class="gate" id="gate">
+  <div class="gate-inner">
+    <div class="gate-mark">M</div>
+    <h2>Clinic Ledger</h2>
+    <p>Sign in with your Google account to access your data.</p>
+    <button class="btn gold" id="signInBtn">Sign in with Google</button>
+    <div class="gate-msg" id="gateMsg"></div>
+  </div>
+</div>
+
 <header>
   <div class="brand">
     <div class="brand-mark">M</div>
     <div>
       <h1>Clinic Ledger</h1>
       <div class="sub">Pediatric Orthopedic</div>
+    </div>
+    <div class="user-chip" id="userChip" style="display:none">
+      <span id="userEmail"></span>
+      <span class="cloud-status" id="cloudStatus"></span>
+      <button id="signOutBtn">Sign out</button>
     </div>
   </div>
   <div class="tabs">
@@ -396,6 +426,8 @@ main{padding:20px;padding-bottom:80px;max-width:900px;margin:0 auto}
     <button class="btn" id="exportXlsxBtn">Export Excel</button>
     <button class="btn secondary" id="exportCsvBtn">Export CSV</button>
     <button class="btn secondary" id="backupBtn">Backup All</button>
+    <button class="btn secondary" id="importBtn">Import Backup</button>
+    <input type="file" id="importFile" accept="application/json" style="display:none">
   </div>
 
   <div class="ornament">✦ ✦ ✦</div>
@@ -403,24 +435,110 @@ main{padding:20px;padding-bottom:80px;max-width:900px;margin:0 auto}
 
 </main>
 
-<script>
-const STORAGE_KEY = 'clinic_days_v2';
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
+  from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+import { getFirestore, collection, doc, setDoc, deleteDoc, getDocs, writeBatch,
+         enableIndexedDbPersistence }
+  from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyC5OGwK7g6SkmbzHtR2qVZ2aMIw3eSGC9M",
+  authDomain: "clinic-lodger.firebaseapp.com",
+  projectId: "clinic-lodger",
+  storageBucket: "clinic-lodger.firebasestorage.app",
+  messagingSenderId: "896403540929",
+  appId: "1:896403540929:web:81a7f6a2a0e324a4a8fd40"
+};
+const ALLOWED_EMAIL = 'alahmarimousa@gmail.com';
+
+const fbApp = initializeApp(firebaseConfig);
+const auth = getAuth(fbApp);
+const db = getFirestore(fbApp);
+enableIndexedDbPersistence(db).catch(()=>{}); // offline cache; fails on multi-tab — ignore
+
+const STORAGE_KEY = 'clinic_days_v2'; // legacy local cache, used only for one-time migration
 let days = [];
 let charts = {};
 let current = {insurance:0, cash:0, initial:0, followup:0, notes:''};
-let editingDate = null; // ISO date string if editing existing day
+let editingDate = null;
+let currentUid = null;
 
 const counters = ['insurance','cash','initial','followup'];
 
-function load(){
-  try{
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if(!raw) return [];
-    const arr = JSON.parse(raw);
-    return Array.isArray(arr) ? arr : [];
-  }catch(e){return []}
+const cloudStatusEl = () => document.getElementById('cloudStatus');
+function setCloud(state, text){
+  const el = cloudStatusEl(); if(!el) return;
+  el.className = 'cloud-status' + (state ? ' ' + state : '');
+  el.textContent = text || '';
 }
-function persist(){localStorage.setItem(STORAGE_KEY, JSON.stringify(days))}
+
+function daysCol(){ return collection(db, 'users', currentUid, 'days'); }
+function dayRef(date){ return doc(db, 'users', currentUid, 'days', date); }
+
+async function load(){
+  if(!currentUid) return [];
+  setCloud('syncing', '↻ syncing');
+  try{
+    const snap = await getDocs(daysCol());
+    const arr = snap.docs.map(d => d.data());
+    arr.sort((a,b) => b.date.localeCompare(a.date));
+    setCloud('', '✓ synced');
+    return arr;
+  }catch(e){
+    console.error('Firestore load failed:', e);
+    setCloud('error', '✕ offline');
+    return [];
+  }
+}
+
+async function persistDay(day){
+  if(!currentUid) return;
+  setCloud('syncing', '↻ saving');
+  try{
+    await setDoc(dayRef(day.date), day);
+    setCloud('', '✓ saved');
+  }catch(e){
+    console.error('Firestore save failed:', e);
+    setCloud('error', '✕ save failed');
+    throw e;
+  }
+}
+
+async function removeDay(date){
+  if(!currentUid) return;
+  setCloud('syncing', '↻ deleting');
+  try{
+    await deleteDoc(dayRef(date));
+    setCloud('', '✓ deleted');
+  }catch(e){
+    console.error('Firestore delete failed:', e);
+    setCloud('error', '✕ delete failed');
+    throw e;
+  }
+}
+
+async function uploadMany(arr){
+  if(!currentUid || !arr.length) return 0;
+  const batch = writeBatch(db);
+  for(const d of arr) batch.set(dayRef(d.date), d);
+  await batch.commit();
+  return arr.length;
+}
+
+async function migrateLegacyLocalStorage(){
+  if(localStorage.getItem('migrated_to_firestore') === 'true') return;
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if(!raw) return;
+  let arr; try{ arr = JSON.parse(raw) }catch{ return }
+  if(!Array.isArray(arr) || arr.length === 0) return;
+  // Only migrate if Firestore is empty (don't overwrite)
+  const existing = await getDocs(daysCol());
+  if(!existing.empty){ localStorage.setItem('migrated_to_firestore','true'); return; }
+  await uploadMany(arr);
+  localStorage.setItem('migrated_to_firestore','true');
+}
 
 function todayISO(){
   const d = new Date();
@@ -524,7 +642,7 @@ function loadDayForDate(dateStr){
 entryDate.addEventListener('change', () => loadDayForDate(entryDate.value));
 
 // ====== SAVE ======
-document.getElementById('saveBtn').addEventListener('click', () => {
+document.getElementById('saveBtn').addEventListener('click', async () => {
   const date = entryDate.value;
   if(!date){alert('Please pick a date.'); return}
   const payorTotal = current.insurance + current.cash;
@@ -537,21 +655,25 @@ document.getElementById('saveBtn').addEventListener('click', () => {
     const ok = confirm(`Payor count (${payorTotal}) doesn't match visit count (${visitTotal}). Save anyway?`);
     if(!ok) return;
   }
-  // Remove existing for same date if any
-  days = days.filter(d => d.date !== date);
-  days.push({
-    date: date,
+  const dayDoc = {
+    date,
     insurance: current.insurance,
     cash: current.cash,
     initial: current.initial,
     followup: current.followup,
     notes: current.notes || '',
     savedAt: new Date().toISOString()
-  });
+  };
+  try{
+    await persistDay(dayDoc);
+  }catch(e){
+    showStatus('Save failed — check your connection.', 'error');
+    return;
+  }
+  days = days.filter(d => d.date !== date);
+  days.push(dayDoc);
   days.sort((a,b) => b.date.localeCompare(a.date));
-  persist();
   showStatus(editingDate ? '✓ Day updated.' : '✓ Day saved.', 'success');
-  // Reset for next entry
   setTimeout(() => {
     current = {insurance:0, cash:0, initial:0, followup:0, notes:''};
     editingDate = null;
@@ -626,10 +748,15 @@ function renderRecords(){
     });
   });
   recordsList.querySelectorAll('[data-del-date]').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       if(!confirm('Delete this clinic day?')) return;
+      try{
+        await removeDay(btn.dataset.delDate);
+      }catch{
+        alert('Delete failed — check your connection.');
+        return;
+      }
       days = days.filter(d => d.date !== btn.dataset.delDate);
-      persist();
       renderRecords();
     });
   });
@@ -800,9 +927,90 @@ document.getElementById('backupBtn').addEventListener('click', () => {
   URL.revokeObjectURL(url);
 });
 
-// ====== INIT ======
-days = load();
-loadDayForDate(entryDate.value);
+// ====== IMPORT BACKUP ======
+const importBtn = document.getElementById('importBtn');
+const importFile = document.getElementById('importFile');
+importBtn.addEventListener('click', () => importFile.click());
+importFile.addEventListener('change', async (ev) => {
+  const file = ev.target.files[0];
+  if(!file) return;
+  let arr;
+  try{
+    const text = await file.text();
+    arr = JSON.parse(text);
+    if(!Array.isArray(arr)) throw new Error('Not a clinic backup file');
+  }catch(e){
+    alert('Could not read this file — make sure it is a Clinic_backup_*.json file.');
+    importFile.value = '';
+    return;
+  }
+  const valid = arr.filter(d => d && typeof d.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d.date));
+  if(valid.length === 0){
+    alert('No valid clinic days found in this file.');
+    importFile.value = '';
+    return;
+  }
+  const overlap = days.filter(d => valid.find(v => v.date === d.date)).length;
+  const msg = overlap
+    ? `Import ${valid.length} clinic day${valid.length>1?'s':''}? ${overlap} day${overlap>1?'s':''} already exist and will be overwritten.`
+    : `Import ${valid.length} clinic day${valid.length>1?'s':''} into your cloud database?`;
+  if(!confirm(msg)){ importFile.value=''; return; }
+  try{
+    setCloud('syncing', `↻ importing ${valid.length}…`);
+    await uploadMany(valid);
+    days = await load();
+    renderRecords();
+    renderStats();
+    alert(`Imported ${valid.length} clinic days.`);
+  }catch(e){
+    console.error(e);
+    alert('Import failed — check your connection and try again.');
+  }
+  importFile.value = '';
+});
+
+// ====== AUTH ======
+const gate = document.getElementById('gate');
+const gateMsg = document.getElementById('gateMsg');
+const userChip = document.getElementById('userChip');
+const userEmail = document.getElementById('userEmail');
+
+document.getElementById('signInBtn').addEventListener('click', async () => {
+  gateMsg.textContent = '';
+  try{
+    await signInWithPopup(auth, new GoogleAuthProvider());
+  }catch(e){
+    console.error(e);
+    if(e.code === 'auth/popup-blocked'){
+      gateMsg.textContent = 'Pop-up blocked — please allow pop-ups for this site and try again.';
+    }else if(e.code !== 'auth/popup-closed-by-user' && e.code !== 'auth/cancelled-popup-request'){
+      gateMsg.textContent = 'Sign-in failed: ' + (e.message || e.code);
+    }
+  }
+});
+
+document.getElementById('signOutBtn').addEventListener('click', () => signOut(auth));
+
+onAuthStateChanged(auth, async (user) => {
+  if(!user){
+    currentUid = null;
+    gate.style.display = 'flex';
+    userChip.style.display = 'none';
+    return;
+  }
+  if(user.email !== ALLOWED_EMAIL){
+    gateMsg.textContent = `This app is private — only ${ALLOWED_EMAIL} can sign in.`;
+    await signOut(auth);
+    return;
+  }
+  currentUid = user.uid;
+  userEmail.textContent = user.email;
+  userChip.style.display = 'flex';
+  gate.style.display = 'none';
+  await migrateLegacyLocalStorage();
+  days = await load();
+  loadDayForDate(entryDate.value);
+});
 </script>
 </body>
 </html>
